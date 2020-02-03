@@ -1,0 +1,78 @@
+version: '3.5'
+services:
+  traefik:
+   container_name: traefik
+   image: traefik:alpine
+   restart: always
+   ports:
+    - "80:80"
+    - "443:443"
+   volumes:
+    - /srv/traefik:/etc/traefik # This is where we must create the .pem and .key certificates. They must be called with the same name that we will later put in the command: TLS: / etc / ...
+    - /var/run/docker.sock:/var/run/docker.sock
+   command:
+    - --api
+    - --docker=true
+    - --docker.watch=true
+    - --docker.domain=docker.localhost
+    - --docker.exposedbydefault=false
+    - --logLevel=INFO
+      #- --entryPoints=Name:http Address::80 Redirect.EntryPoint:https # redirect 80 to 443 to force use ssl certificate
+    - --defaultentrypoints=http,https
+        #- --entryPoints=Name:https Address::443 TLS:/etc/traefik/devopstech.crt,/etc/traefik/devopstech.key # comment this if we decide to use let's encrypt (acme)
+        #- --accesslog.filepath=/etc/traefik/traefik_access.log # This is useful to have an access control to the application (headers with the IP etc ..)
+      #- --accesslog.format=json
+      #- --traefiklog=true
+      #- --traefiklog.filepath=/etc/traefik/traefik_log.log # use this command if we want to centralize in a file the logs of traefik.
+      #- --acme=true
+      #- --acme.entrypoint=https
+      #- --acme.tlsChallenge=true    # uncomment everything of these lines if we want to use acme (let's encrypt instead of our own certificate).
+      #- --acme.onhostrule=true
+      #- --acme.storage=/etc/traefik/acme.json
+  influxdb:
+   image: influxdb:latest
+   restart: always
+   container_name: influxdb
+   network_mode: host
+   environment:
+    -  INFLUXDB_DATA_ENGINE=tsm1
+    -  INFLUXDB_REPORTING_DISABLED=false
+    -  INFLUXDB_DB=telegraf
+    -  INFLUXDB_ADMIN_ENABLED=true
+    -  INFLUXDB_ADMIN_USER= admin
+    -  INFLUXDB_ADMIN_PASSWORD= ausias38
+    -  INFLUXDB_USER=telegraf
+    -  INFLUXDB_USER_PASSWORD=ausias38
+   volumes:
+    # Data persistency
+    # sudo mkdir -p /srv/docker/influxdb/data
+    - /srv/docker/influxdb/data:/var/lib/influxdb
+  telegraf:
+   image: telegraf:latest
+   restart: always
+   container_name: telegraf
+   hostname: monitor-main
+   links:
+    - influxdb
+   volumes:
+    - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+  grafana:
+   image: grafana/grafana:latest
+   restart: always
+   container_name: grafana
+   ports:
+    - "3000:3000"
+   environment:
+    - GF_INSTALL_PLUGINS=grafana-clock-panel,briangann-gauge-panel,natel-plotly-panel,grafana-simple-json-datasource
+   links:
+    - influxdb
+   volumes:
+    # Data persistency
+    # sudo mkdir -p /srv/docker/grafana/data; chown 472:472 /srv/docker/grafana/data
+    - /srv/docker/grafana/grafana:/var/lib/grafana
+    - /srv/docker/grafana/share/grafana:/usr/share/grafana
+   labels:
+    - traefik.enable=true
+    - traefik.port=3000 # jenkins default image expose by default this port, don't change this parameter :)
+    - traefik.frontend.rule=Host:daniel.192.168.20.207.nip.io
+    - traefik.backend=grafana
