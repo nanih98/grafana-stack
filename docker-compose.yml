@@ -1,0 +1,44 @@
+version: '3.5'
+services:
+  influxdb:
+   image: influxdb:latest
+   restart: always
+   container_name: influxdb
+   network_mode: host
+   environment:
+    -  INFLUXDB_DATA_ENGINE=tsm1
+    -  INFLUXDB_REPORTING_DISABLED=false
+    -  INFLUXDB_DB=telegraf
+    -  INFLUXDB_ADMIN_ENABLED=true
+    -  INFLUXDB_ADMIN_USER= admin
+    -  INFLUXDB_ADMIN_PASSWORD= ausias38
+    -  INFLUXDB_USER=telegraf
+    -  INFLUXDB_USER_PASSWORD=ausias38
+   volumes:
+    # Data persistency
+    # sudo mkdir -p /srv/docker/influxdb/data
+    - /srv/docker/influxdb/data:/var/lib/influxdb
+  telegraf:
+   image: telegraf:latest
+   restart: always
+   container_name: telegraf
+   hostname: monitor-main
+   links:
+    - influxdb
+   volumes:
+    - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+  grafana:
+   image: grafana/grafana:latest
+   restart: always
+   container_name: grafana
+   ports:
+    - "80:3000"
+   environment:
+    - GF_INSTALL_PLUGINS=grafana-clock-panel,briangann-gauge-panel,natel-plotly-panel,grafana-simple-json-datasource
+   links:
+    - influxdb
+   volumes:
+    # Data persistency
+    # sudo mkdir -p /srv/docker/grafana/data; chown 472:472 /srv/docker/grafana/data
+    - /srv/docker/grafana/grafana:/var/lib/grafana
+    - /srv/docker/grafana/share/grafana:/usr/share/grafana
